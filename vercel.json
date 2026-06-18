@@ -1,0 +1,7 @@
+{
+  "crons": [
+    { "path": "/api/cron/accrue-profit",    "schedule": "5 0 * * *" },
+    { "path": "/api/cron/process-release",  "schedule": "10 0 * * *" },
+    { "path": "/api/cron/process-reinvest", "schedule": "15 0 * * *" }
+  ]
+}
