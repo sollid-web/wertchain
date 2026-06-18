@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/supabase/client";
 
 type Tab = "overview" | "deposits" | "withdrawals" | "migrations" | "users";
 

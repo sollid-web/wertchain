@@ -18,7 +18,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient } from "@/supabase/server";
 import { adminClient } from "@/lib/ledger";
 
 // Platform wallet addresses — one per supported payment method.

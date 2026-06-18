@@ -21,7 +21,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerClient } from "@/supabase/server";
 import { adminClient } from "@/lib/ledger";
 
 export async function POST(req: NextRequest) {

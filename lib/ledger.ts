@@ -18,7 +18,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/supabase/types";
+import type { Database } from "@/supabase/types";
 
 // Service-role client — bypasses RLS for trusted server-side ledger writes.
 // NEVER expose this client to the browser.

@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { Database } from '@/lib/supabase/types'
+import { Database } from '@/supabase/types'
 
 // Standard server client — uses anon key, subject to RLS
 // Use in Server Components, Server Actions, Route Handlers
