@@ -132,7 +132,7 @@ export async function postLedgerTransaction(
       withdrawal_id: withdrawalId ?? null,
       migration_id: migrationId ?? null,
       description,
-      amount: parseFloat(amount).toFixed(8),
+      amount: parseFloat(amount),
       currency,
       idempotency_key: idempotencyKey,
       initiated_by: initiatedBy ?? null,
@@ -152,7 +152,7 @@ export async function postLedgerTransaction(
     account_type: line.accountType,
     user_id: line.userId ?? null,
     direction: line.direction,
-    amount: parseFloat(line.amount).toFixed(8),
+    amount: parseFloat(line.amount),
     currency,
     sequence_num: idx + 1,
   }));

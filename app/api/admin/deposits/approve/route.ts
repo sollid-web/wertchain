@@ -25,12 +25,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/supabase/server";
+import { createClient, createAdminClient } from "@/supabase/server";
 import { adminClient, postLedgerTransaction } from "@/lib/ledger";
 
 export async function POST(req: NextRequest) {
   // 1. Auth
-  const supabase = await createServerClient();
+  const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const amount = parseFloat(contract.principal_amount).toFixed(8);
+  const amount = Number(contract.principal_amount);
   const userId = deposit.user_id;
   const now = new Date();
 
@@ -189,7 +189,7 @@ export async function POST(req: NextRequest) {
       contractId,
       depositId: deposit_id,
       description: `Deposit confirmed — ${amount} ${deposit.currency} | tx: ${deposit.payment_reference ?? "manual"}`,
-      amount,
+      amount: amount.toFixed(8),
       currency: deposit.currency,
       idempotencyKey: `deposit_confirmed_${deposit_id}`,
       initiatedBy: user.id,
@@ -198,13 +198,13 @@ export async function POST(req: NextRequest) {
         {
           accountType: "PLATFORM_DEPOSIT_CLEARING",
           direction: "DEBIT",
-          amount,
+          amount: amount.toFixed(8),
           userId: undefined,    // platform account — no user_id
         },
         {
           accountType: "USER_WALLET",
           direction: "CREDIT",
-          amount,
+          amount: amount.toFixed(8),
           userId,
         },
       ],
@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
       userId,
       contractId,
       description: `Investment created — ${amount} ${deposit.currency} locked in contract ${contractId}`,
-      amount,
+      amount: amount.toFixed(8),
       currency: deposit.currency,
       idempotencyKey: `investment_creation_${contractId}`,
       initiatedBy: user.id,
@@ -224,13 +224,13 @@ export async function POST(req: NextRequest) {
         {
           accountType: "USER_WALLET",
           direction: "DEBIT",
-          amount,
+          amount: amount.toFixed(8),
           userId,
         },
         {
           accountType: "USER_CAPITAL_LOCKED",
           direction: "CREDIT",
-          amount,
+          amount: amount.toFixed(8),
           userId,
         },
       ],
@@ -263,7 +263,7 @@ export async function POST(req: NextRequest) {
     // Update wallet cache — locked_capital column (NOT locked_balance)
     await adminClient.rpc("increment_locked_capital", {
       p_user_id: userId,
-      p_amount: amount,
+      p_amount: Number(amount),
     }).then(({ error }) => {
       if (error) console.error("Wallet cache update failed (non-fatal):", error.message);
     });
@@ -289,7 +289,7 @@ export async function POST(req: NextRequest) {
         start_date: startDate,
         maturity_date: maturityDateStr,
         release_eligible_date: releaseDateStr,
-        principal_amount: amount,
+        principal_amount: Number(amount).toFixed(8),
       },
       ledger: {
         deposit_tx_id: depositTxId,

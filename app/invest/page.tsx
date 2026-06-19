@@ -1,160 +1,146 @@
-"use client";
-
-import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@/supabase/client";
 import Link from "next/link";
 
-const C = {
-  base: "#0A0F1E", surface: "#0F1629", card: "#131C35", border: "#1E2D50",
-  gold: "#F0B429", text: "#E8EDF5", muted: "#6B7A99", green: "#22C55E", red: "#EF4444",
+export const metadata = {
+  title: "Investment Overview | Wertchain Immutable Master Ledger",
+  description:
+    "Explore Wertchain investment tiers, fixed-term contract structure, and custody-backed capital allocation.",
 };
 
-const fmt = (n: number) =>
-  new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-
-interface Plan {
-  id: string;
-  name: string;
-  daily_rate: number;
-  duration_days: number;
-  min_amount: number;
-  max_amount: number | null;
-  description: string | null;
-  is_active: boolean;
-  currency: string;
-}
-
-interface Wallet {
-  available_balance: number;
-  currency: string;
-}
+const tiers = [
+  {
+    label: "Wertchain Start",
+    min: "$1,000",
+    max: "$4,999",
+    duration: "14 Days",
+    rate: "5%",
+    delay: "14 Days",
+    reinvest: "Default ON",
+  },
+  {
+    label: "Wertchain Growth",
+    min: "$5,000",
+    max: "$14,999",
+    duration: "30 Days",
+    rate: "8%",
+    delay: "30 Days",
+    reinvest: "Default ON",
+  },
+  {
+    label: "Wertchain Professional",
+    min: "$15,000",
+    max: "$49,999",
+    duration: "60 Days",
+    rate: "18%",
+    delay: "30 Days",
+    reinvest: "Default ON",
+  },
+  {
+    label: "Wertchain Elite",
+    min: "$50,000",
+    max: "Unlimited",
+    duration: "120 Days",
+    rate: "40%",
+    delay: "60 Days",
+    reinvest: "Default ON",
+  },
+];
 
 export default function InvestPage() {
-  const supabase = createClient();
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [wallet, setWallet] = useState<Wallet | null>(null);
-  const [selected, setSelected] = useState<Plan | null>(null);
-  const [amount, setAmount] = useState("");
-  const [reinvest, setReinvest] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-
-  const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { window.location.href = "/auth/login"; return; }
-
-    const [plansRes, walletRes] = await Promise.all([
-      supabase.from("wc_investment_plans").select("*").eq("is_active", true).order("min_amount"),
-      supabase.from("wc_wallet_balances").select("available_balance, currency").eq("user_id", user.id).single(),
-    ]);
-
-    setPlans(plansRes.data || []);
-    setWallet(walletRes.data);
-  }, [supabase]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const totalReturn = (p: Plan, amt: number) => amt + (amt * p.daily_rate / 100 * p.duration_days);
-  const totalProfit = (p: Plan, amt: number) => amt * p.daily_rate / 100 * p.duration_days;
-
-  const handleInvest = async () => {
-    if (!selected || !amount) return;
-    const amt = parseFloat(amount);
-    if (isNaN(amt) || amt < selected.min_amount) { setError(`Minimum investment is $${fmt(selected.min_amount)}`); return; }
-    if (selected.max_amount && amt > selected.max_amount) { setError(`Maximum investment is $${fmt(selected.max_amount)}`); return; }
-    if (wallet && amt > Number(wallet.available_balance)) { setError("Insufficient wallet balance"); return; }
-
-    setSubmitting(true);
-    setError("");
-    const res = await fetch("/api/contracts/create", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan_id: selected.id, amount: amt, auto_reinvest: reinvest }),
-    });
-    const data = await res.json();
-    setSubmitting(false);
-    if (data.success) { setSuccess(true); setSelected(null); setAmount(""); }
-    else setError(data.error || "Failed to create contract");
-  };
-
-  if (success) return (
-    <div style={{ minHeight: "100vh", background: C.base, color: C.text, fontFamily: "Inter, system-ui, sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 48, textAlign: "center", maxWidth: 420 }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>✓</div>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: C.green, marginBottom: 12 }}>Investment Created</h2>
-        <p style={{ color: C.muted, marginBottom: 24 }}>Your plan is active. Profits accrue daily starting tomorrow.</p>
-        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-          <Link href="/dashboard" style={{ background: C.gold, color: C.base, padding: "10px 20px", borderRadius: 8, fontWeight: 700, textDecoration: "none" }}>Dashboard</Link>
-          <button onClick={() => setSuccess(false)} style={{ background: "none", border: `1px solid ${C.border}`, color: C.text, padding: "10px 20px", borderRadius: 8, cursor: "pointer" }}>Invest Again</button>
-        </div>
-      </div>
-    </div>
-  );
-
   return (
-    <div style={{ minHeight: "100vh", background: C.base, color: C.text, fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <header style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 24px" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 26, height: 26, background: C.gold, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 13, color: C.base }}>W</div>
-            <span style={{ fontWeight: 700, fontSize: 15 }}>Wertchain</span>
+    <div className="bg-slate-950 text-slate-100">
+      <div className="mx-auto max-w-6xl px-6 py-16 sm:px-8 lg:px-12">
+        <div className="space-y-4">
+          <p className="text-sm uppercase tracking-[0.3em] text-amber-300">Investment Overview</p>
+          <h1 className="text-4xl font-semibold text-white sm:text-5xl">
+            Fixed-Term Contracts Backed by Immutable Ledger Control
+          </h1>
+          <p className="max-w-3xl text-lg leading-8 text-slate-300">
+            Wertchain offers a discrete set of fixed-term investment tiers built around audit-first accounting and structural capital separation. Every commitment is represented in the ledger as a precise debit/credit pair, not a pooled claim.
+          </p>
+        </div>
+
+        <div className="mt-14 grid gap-8 lg:grid-cols-2">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-xl shadow-slate-950/20">
+            <h2 className="text-2xl font-semibold text-white">Contract Discipline</h2>
+            <p className="mt-4 text-slate-300 leading-7">
+              Each plan is a self-contained contract lifecycle. Maturity, payout, and optional reinvestment are enforced through deterministic state transitions rather than discretionary accounting.
+            </p>
           </div>
-          <nav style={{ display: "flex", gap: 4 }}>
-            {[{ href: "/dashboard", label: "Dashboard" }, { href: "/invest", label: "Invest" }, { href: "/wallet", label: "Wallet" }].map(n => (
-              <Link key={n.href} href={n.href} style={{ color: n.href === "/invest" ? C.gold : C.muted, fontSize: 13, fontWeight: 500, padding: "6px 14px", borderRadius: 6, textDecoration: "none" }}>{n.label}</Link>
-            ))}
-          </nav>
-          <Link href="/wallet" style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "6px 14px", fontSize: 13, color: C.gold, fontWeight: 700, textDecoration: "none", fontFamily: "monospace" }}>
-            ${fmt(Number(wallet?.available_balance || 0))}
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-xl shadow-slate-950/20">
+            <h2 className="text-2xl font-semibold text-white">Custody Integrity</h2>
+            <p className="mt-4 text-slate-300 leading-7">
+              Capital is segregated at the ledger level. Active commitments are tracked separately from available balances, reducing the possibility of unintended liability commingling.
+            </p>
+          </div>
+        </div>
+
+        <section className="mt-14 space-y-10">
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-xl shadow-slate-950/20">
+            <h2 className="text-2xl font-semibold text-white">Plan Structure</h2>
+            <p className="mt-4 text-slate-300 leading-7">
+              Every deposit enters a plan with a known term, fixed yield assumption, and a defined release window. This prevents opaque duration drift and keeps the capital cycle visible.
+            </p>
+          </div>
+
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-xl shadow-slate-950/20">
+            <h2 className="text-2xl font-semibold text-white">Autonomous Reinvestment</h2>
+            <p className="mt-4 text-slate-300 leading-7">
+              Auto-reinvest is the default behavior for every plan, allowing maturity outcomes to flow back into new contract cycles without manual negotiation.
+            </p>
+          </div>
+        </section>
+
+        <div className="mt-14 overflow-hidden rounded-3xl border border-slate-800 bg-slate-900/90 shadow-xl shadow-slate-950/30">
+          <div className="bg-slate-950/80 px-6 py-6 text-slate-400">
+            <p className="text-sm uppercase tracking-[0.35em]">Allocation Matrix</p>
+          </div>
+          <table className="w-full border-separate border-spacing-0 text-left text-sm text-slate-300">
+            <thead className="bg-slate-950/80 text-slate-400">
+              <tr>
+                <th className="px-6 py-4">Tier</th>
+                <th className="px-6 py-4">Minimum</th>
+                <th className="px-6 py-4">Maximum</th>
+                <th className="px-6 py-4">Duration</th>
+                <th className="px-6 py-4">Yield</th>
+                <th className="px-6 py-4">Release Delay</th>
+                <th className="px-6 py-4">Reinvest</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tiers.map((tier) => (
+                <tr key={tier.label} className="border-t border-slate-800/90 hover:bg-slate-900/80">
+                  <td className="px-6 py-4 font-semibold text-white">{tier.label}</td>
+                  <td className="px-6 py-4">{tier.min}</td>
+                  <td className="px-6 py-4">{tier.max}</td>
+                  <td className="px-6 py-4">{tier.duration}</td>
+                  <td className="px-6 py-4 text-emerald-300">{tier.rate}</td>
+                  <td className="px-6 py-4">{tier.delay}</td>
+                  <td className="px-6 py-4">{tier.reinvest}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-14 rounded-3xl border border-slate-800 bg-slate-900/80 p-8 shadow-xl shadow-slate-950/20">
+          <h2 className="text-2xl font-semibold text-white">How to Engage</h2>
+          <p className="mt-4 text-slate-300 leading-7">
+            Clients onboard through the platform interface, select a tier, and establish the deposit amount. The system then creates a verifiable contract record and assigns all ledger entries to the corresponding liability classes.
+          </p>
+          <p className="mt-4 text-slate-300 leading-7">
+            Because the platform is ledger-first, every step is auditable and all capital commitments are anchored in a consistent financial state machine.
+          </p>
+        </div>
+
+        <div className="mt-12 flex flex-wrap gap-3 text-sm text-slate-500">
+          <Link href="/" className="text-amber-300 hover:text-white">
+            ← Back to homepage
+          </Link>
+          <Link href="/legal" className="text-slate-200 hover:text-white">
+            Legal disclosure
           </Link>
         </div>
-      </header>
-
-      <main style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 24px" }}>
-        <div style={{ marginBottom: 36 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>Investment Plans</h1>
-          <p style={{ color: C.muted, fontSize: 14 }}>Choose a plan and start earning daily returns.</p>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20, marginBottom: 40 }}>
-          {plans.map(p => {
-            const isSelected = selected?.id === p.id;
-            return (
-              <div key={p.id} onClick={() => { setSelected(isSelected ? null : p); setAmount(String(p.min_amount)); setError(""); }} style={{ background: isSelected ? `${C.gold}0A` : C.card, border: `1px solid ${isSelected ? C.gold : C.border}`, borderRadius: 14, padding: 28, cursor: "pointer", position: "relative" }}>
-                <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 4, color: isSelected ? C.gold : C.text }}>{p.name}</h3>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-                  {[
-                    { label: "Daily Rate", value: `${p.daily_rate}%` },
-                    { label: "Duration", value: `${p.duration_days} days` },
-                    { label: "Min. Amount", value: `$${fmt(p.min_amount)}` },
-                    { label: "Max. Amount", value: p.max_amount ? `$${fmt(p.max_amount)}` : "Unlimited" },
-                  ].map(s => (
-                    <div key={s.label} style={{ background: `${C.border}55`, borderRadius: 8, padding: "10px 12px" }}>
-                      <p style={{ color: C.muted, fontSize: 10, fontWeight: 600, textTransform: "uppercase", marginBottom: 4 }}>{s.label}</p>
-                      <p style={{ color: C.text, fontWeight: 700, fontSize: 14, fontFamily: "monospace" }}>{s.value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {selected && (
-          <div style={{ background: C.card, border: `1px solid ${C.gold}`, borderRadius: 16, padding: 32, maxWidth: 500 }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 24 }}>Invest in {selected.name}</h3>
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ position: "relative" }}>
-                <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: C.gold, fontWeight: 700 }}>$</span>
-                <input type="number" value={amount} onChange={e => { setAmount(e.target.value); setError(""); }} min={selected.min_amount} style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 14px 12px 28px", color: C.text, fontSize: 16, fontFamily: "monospace", boxSizing: "border-box", outline: "none" }} />
-              </div>
-            </div>
-            <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, cursor: "pointer" }}><input type="checkbox" checked={reinvest} onChange={e => setReinvest(e.target.checked)} style={{ width: 16, height: 16, accentColor: C.gold }} /><span style={{ fontSize: 13, color: C.muted }}>Auto-reinvest at maturity</span></label>
-            {error && <p style={{ color: C.red, fontSize: 13, marginBottom: 16 }}>{error}</p>}
-            <button onClick={handleInvest} disabled={submitting || !amount} style={{ width: "100%", background: submitting ? C.border : C.gold, color: C.base, border: "none", borderRadius: 10, padding: "14px", fontSize: 15, fontWeight: 800, cursor: submitting ? "not-allowed" : "pointer" }}>{submitting ? "Creating…" : "Confirm Investment"}</button>
-          </div>
-        )}
-      </main>
+      </div>
     </div>
   );
 }

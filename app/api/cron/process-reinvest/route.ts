@@ -4,17 +4,17 @@
  * Daily cron — creates new contracts for AUTO_REINVESTED contracts.
  *
  * A contract enters AUTO_REINVESTED state when:
- * - It matured AND auto_reinvest = true
- * (set by the profit accrual cron on final day)
+ *   - It matured AND auto_reinvest = true
+ *   (set by the profit accrual cron on final day)
  *
  * For each AUTO_REINVESTED contract without a child contract yet:
- * 1. Create new contract on the same plan (same tier, same principal)
- * 2. Post AUTO_REINVEST ledger tx:
- * DR  USER_CAPITAL_LOCKED   (close old contract capital)
- * CR  USER_CAPITAL_LOCKED   (open new contract capital)
- * These net to zero — capital stays locked, just in a new contract.
- * 3. Set parent_contract_id on new contract for lineage tracking
- * 4. Old contract closure_ledger_tx_id updated
+ *   1. Create new contract on the same plan (same tier, same principal)
+ *   2. Post AUTO_REINVEST ledger tx:
+ *        DR  USER_CAPITAL_LOCKED   (close old contract capital)
+ *        CR  USER_CAPITAL_LOCKED   (open new contract capital)
+ *      These net to zero — capital stays locked, just in a new contract.
+ *   3. Set parent_contract_id on new contract for lineage tracking
+ *   4. Old contract closure_ledger_tx_id updated
  *
  * Schedule: daily at 00:15 UTC (after profit accrual and release processing)
  */
@@ -121,8 +121,8 @@ export async function GET(req: NextRequest) {
 
       // Fetch current plan details to recalculate financials
       // (profit_rate may have changed — use snapshot from parent to honour original rate)
-      const principal = parseFloat(contract.principal_amount);
-      const profitRate = parseFloat(contract.profit_rate_snapshot);
+      const principal = Number(contract.principal_amount);
+      const profitRate = Number(contract.profit_rate_snapshot);
       const durationDays = contract.duration_days_snapshot;
       const dailyProfitAmount = (principal * profitRate) / durationDays;
       const expectedProfit = principal * profitRate;
@@ -153,10 +153,10 @@ export async function GET(req: NextRequest) {
           user_id: contract.user_id,
           plan_id: contract.plan_id,
           plan_tier: contract.plan_tier,
-          principal_amount: principalStr,
-          expected_profit: expectedProfit.toFixed(8),
-          daily_profit_amount: dailyProfitAmount.toFixed(8),
-          profit_rate_snapshot: profitRate.toFixed(6),
+          principal_amount: principal,
+          expected_profit: expectedProfit,
+          daily_profit_amount: Number(dailyProfitAmount),
+          profit_rate_snapshot: profitRate,
           duration_days_snapshot: durationDays,
           state: "ACTIVE",
           auto_reinvest: true,

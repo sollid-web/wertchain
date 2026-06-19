@@ -21,12 +21,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/supabase/server";
+import { createClient, createAdminClient } from "@/supabase/server";
 import { adminClient } from "@/lib/ledger";
 
 export async function POST(req: NextRequest) {
   // 1. Auth
-  const supabase = await createServerClient();
+  const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const topupNum = parseFloat(topup_amount);
+  const topupNum = Number(topup_amount);
   if (isNaN(topupNum) || topupNum < 0) {
     return NextResponse.json(
       { error: "topup_amount must be a non-negative number" },
@@ -119,10 +119,10 @@ export async function POST(req: NextRequest) {
   }
 
   // 6. Validate capital amounts
-  const capitalAmount = parseFloat(sourceContract.principal_amount);
+  const capitalAmount = Number(sourceContract.principal_amount);
   const totalNewPrincipal = capitalAmount + topupNum;
-  const targetMin = parseFloat(targetPlan.min_amount);
-  const targetMax = targetPlan.max_amount ? parseFloat(targetPlan.max_amount) : Infinity;
+  const targetMin = Number(targetPlan.min_amount);
+  const targetMax = targetPlan.max_amount ? Number(targetPlan.max_amount) : Infinity;
 
   if (totalNewPrincipal < targetMin) {
     return NextResponse.json(
@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
       .eq("user_id", user.id)
       .single();
 
-    const available = parseFloat(wallet?.available_balance ?? "0");
+    const available = Number(wallet?.available_balance ?? "0");
     if (topupNum > available) {
       return NextResponse.json(
         {
@@ -178,8 +178,8 @@ export async function POST(req: NextRequest) {
         source_contract_id,
         target_plan_id,
         target_plan_tier: targetPlan.tier,
-        capital_amount: capitalAmount.toFixed(8),
-        topup_amount: topupNum.toFixed(8),
+        capital_amount: Number(capitalAmount),
+        topup_amount: Number(topupNum),
         migration_type: migrationType,
         status: "PENDING",
       })
@@ -210,8 +210,8 @@ export async function POST(req: NextRequest) {
           source_contract_id,
           target_plan: targetPlan.label,
           target_tier: targetPlan.tier,
-          capital_amount: capitalAmount.toFixed(8),
-          topup_amount: topupNum.toFixed(8),
+          capital_amount: Number(capitalAmount),
+          topup_amount: Number(topupNum),
           total_new_principal: totalNewPrincipal.toFixed(8),
           migration_type: migrationType,
           status: migration.status,

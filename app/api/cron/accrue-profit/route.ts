@@ -131,9 +131,9 @@ export async function GET(req: NextRequest) {
 
       const totalDays = contract.duration_days_snapshot;
       const isFinalDay = dayNumber >= totalDays;
-      const profitCredited = parseFloat(contract.profit_credited);
-      const expectedProfit = parseFloat(contract.expected_profit);
-      const dailyAmount = parseFloat(contract.daily_profit_amount);
+      const profitCredited = Number(contract.profit_credited);
+      const expectedProfit = Number(contract.expected_profit);
+      const dailyAmount = Number(contract.daily_profit_amount);
 
       // Final day uses remainder formula to avoid rounding drift accumulation
       const todayAmount = isFinalDay
@@ -153,19 +153,19 @@ export async function GET(req: NextRequest) {
         userId: contract.user_id,
         contractId: contract.id,
         description: `Profit accrual day ${dayNumber}/${totalDays} — contract ${contract.id}`,
-        amount: todayAmountStr,
+        amount: todayAmount.toFixed(8),
         idempotencyKey: `profit_accrual_${contract.id}_${today}`,
         lines: [
           {
             accountType: "PLATFORM_PROFIT_LIABILITY",
             direction: "DEBIT",
-            amount: todayAmountStr,
+            amount: todayAmount.toFixed(8),
             userId: undefined,
           },
           {
             accountType: "USER_PROFIT_PENDING",
             direction: "CREDIT",
-            amount: todayAmountStr,
+            amount: todayAmount.toFixed(8),
             userId: contract.user_id,
           },
         ],
@@ -177,12 +177,13 @@ export async function GET(req: NextRequest) {
         user_id: contract.user_id,
         accrual_date: today,
         day_number: dayNumber,
-        amount: todayAmountStr,
+        amount: todayAmount,
         ledger_tx_id: transactionId,
       });
 
-      const newProfitCredited = (profitCredited + todayAmount).toFixed(8);
-      const contractUpdate: Record<string, unknown> = {
+      const newProfitCredited = profitCredited + todayAmount;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contractUpdate: Record<string, any> = {
         profit_credited: newProfitCredited,
       };
 
@@ -192,7 +193,7 @@ export async function GET(req: NextRequest) {
         contractUpdate.matured_at = new Date().toISOString();
 
         // PROFIT_CREDIT: move all pending profit → USER_WALLET
-        const totalPending = parseFloat(newProfitCredited);
+        const totalPending = Number(newProfitCredited);
         if (totalPending > 0) {
           await postLedgerTransaction({
             entryType: "PROFIT_CREDIT",
@@ -220,7 +221,7 @@ export async function GET(req: NextRequest) {
           // Update available_balance cache
           await adminClient.rpc("increment_available_balance", {
             p_user_id: contract.user_id,
-            p_amount: totalPending.toFixed(8),
+            p_amount: totalPending,
           }).then(({ error }) => {
             if (error) {
               console.error(`available_balance cache failed for ${contract.user_id}:`, error.message);
@@ -232,7 +233,7 @@ export async function GET(req: NextRequest) {
         contractUpdate.state = contract.auto_reinvest ? "AUTO_REINVESTED" : "RELEASE_QUEUE";
       }
 
-      await adminClient.from("wc_contracts").update(contractUpdate).eq("id", contract.id);
+      await adminClient.from("wc_contracts").update(contractUpdate as any).eq("id", contract.id);
       processed++;
     } catch (err) {
       failed++;
@@ -253,4 +254,3 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ date: today, status: finalStatus, processed, failed, errors: errors.length > 0 ? errors : undefined });
 }
-

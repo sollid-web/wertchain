@@ -1122,8 +1122,24 @@ export type Database = {
       }
     }
     Functions: {
+      decrement_available_balance: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
+      increment_available_balance: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
+      increment_locked_capital: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
       is_admin: { Args: never; Returns: boolean }
       is_admin_role: { Args: { required_role: string }; Returns: boolean }
+      process_capital_release_balances: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: undefined
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }

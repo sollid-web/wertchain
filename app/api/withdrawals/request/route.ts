@@ -4,31 +4,31 @@
  * User requests a withdrawal of profit or released capital.
  *
  * Two withdrawal types (matches schema CHECK constraint):
- * PROFIT  — from USER_WALLET (profit credited at maturity)
- * CAPITAL — from USER_WALLET (capital after RELEASED state)
+ *   PROFIT  — from USER_WALLET (profit credited at maturity)
+ *   CAPITAL — from USER_WALLET (capital after RELEASED state)
  *
  * Both types debit USER_WALLET because by the time a user can withdraw:
- * - Profit has already been credited to USER_WALLET at maturity (PROFIT_CREDIT tx)
- * - Capital has already been moved to USER_WALLET via CAPITAL_RELEASE tx
+ *   - Profit has already been credited to USER_WALLET at maturity (PROFIT_CREDIT tx)
+ *   - Capital has already been moved to USER_WALLET via CAPITAL_RELEASE tx
  *
  * Flow:
- * 1. Validate user has sufficient available_balance in wc_wallet_balances
- * 2. For CAPITAL withdrawals — verify linked contract is in RELEASED state
- * 3. Post WITHDRAWAL_REQUEST ledger tx:
- * DR  USER_WALLET                  (debit available)
- * CR  PLATFORM_WITHDRAWAL_RESERVE  (stage for payout)
- * 4. Decrement available_balance cache
- * 5. Create wc_withdrawals record in PENDING state
- * 6. Admin then approves or rejects via /api/admin/withdrawals/approve
+ *   1. Validate user has sufficient available_balance in wc_wallet_balances
+ *   2. For CAPITAL withdrawals — verify linked contract is in RELEASED state
+ *   3. Post WITHDRAWAL_REQUEST ledger tx:
+ *        DR  USER_WALLET                  (debit available)
+ *        CR  PLATFORM_WITHDRAWAL_RESERVE  (stage for payout)
+ *   4. Decrement available_balance cache
+ *   5. Create wc_withdrawals record in PENDING state
+ *   6. Admin then approves or rejects via /api/admin/withdrawals/approve
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/supabase/server";
+import { createClient } from "@/supabase/server";
 import { adminClient, postLedgerTransaction } from "@/lib/ledger";
 
 export async function POST(req: NextRequest) {
   // 1. Auth
-  const supabase = await createServerClient();
+  const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const amountNum = parseFloat(amount);
+  const amountNum = Number(amount);
   if (isNaN(amountNum) || amountNum <= 0) {
     return NextResponse.json(
       { error: "amount must be a positive number" },
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
   }
 
-  const availableBalance = parseFloat(wallet.available_balance);
+  const availableBalance = wallet.available_balance as number;
   if (amountNum > availableBalance) {
     return NextResponse.json(
       {
@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
       );
     }
     // Amount must match contract principal exactly for capital withdrawals
-    const principalAmount = parseFloat(contract.principal_amount);
+    const principalAmount = contract.principal_amount as number;
     if (Math.abs(amountNum - principalAmount) > 0.00000001) {
       return NextResponse.json(
         {
@@ -175,20 +175,20 @@ export async function POST(req: NextRequest) {
       userId: user.id,
       contractId: contract_id,
       description: `Withdrawal request — ${withdrawal_type} ${amountStr} ${currency} to ${destination_details.network} wallet`,
-      amount: amountStr,
+      amount: amountNum.toFixed(8),
       currency,
       idempotencyKey: `withdrawal_request_${user.id}_${Date.now()}`,
       lines: [
         {
           accountType: "USER_WALLET",
           direction: "DEBIT",
-          amount: amountStr,
+          amount: amountNum.toFixed(8),
           userId: user.id,
         },
         {
           accountType: "PLATFORM_WITHDRAWAL_RESERVE",
           direction: "CREDIT",
-          amount: amountStr,
+          amount: amountNum.toFixed(8),
           userId: undefined,   // platform account
         },
       ],
@@ -200,11 +200,11 @@ export async function POST(req: NextRequest) {
       .insert({
         user_id: user.id,
         withdrawal_type,
-        amount: amountStr,
+        amount: amountNum,
         currency,
         destination_details,
         status: "PENDING",
-        fee_amount: "0.00000000",   // fee calculated at approval time
+        fee_amount: 0,
         contract_id: contract_id ?? null,
         ledger_tx_id: transactionId,
         notes: `Requested via API — ${withdrawal_type} withdrawal`,
@@ -219,7 +219,7 @@ export async function POST(req: NextRequest) {
     // 8. Decrement available_balance cache
     await adminClient.rpc("decrement_available_balance", {
       p_user_id: user.id,
-      p_amount: amountStr,
+      p_amount: amountNum,
     }).then(({ error }) => {
       if (error) console.error("available_balance cache decrement failed (non-fatal):", error.message);
     });
@@ -230,7 +230,7 @@ export async function POST(req: NextRequest) {
         withdrawal: {
           id: withdrawal.id,
           type: withdrawal_type,
-          amount: amountStr,
+          amount: amountNum.toFixed(8),
           currency,
           destination: destination_details,
           status: withdrawal.status,

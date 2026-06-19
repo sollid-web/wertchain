@@ -18,7 +18,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/supabase/server";
+import { createClient } from "@/supabase/server";
 import { adminClient } from "@/lib/ledger";
 
 // Platform wallet addresses — one per supported payment method.
@@ -40,7 +40,7 @@ const PLATFORM_WALLETS: Record<string, { address: string; paymentMethod: string 
 
 export async function POST(req: NextRequest) {
   // 1. Authenticate
-  const supabase = await createServerClient();
+  const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const amountNum = parseFloat(amount);
+  const amountNum = Number(amount);
   if (isNaN(amountNum) || amountNum <= 0) {
     return NextResponse.json(
       { error: "amount must be a positive number" },
@@ -99,13 +99,13 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (amountNum < parseFloat(plan.min_amount)) {
+  if (amountNum < Number(plan.min_amount)) {
     return NextResponse.json(
       { error: `Minimum investment is ${plan.min_amount} for ${plan.label}` },
       { status: 400 }
     );
   }
-  if (plan.max_amount && amountNum > parseFloat(plan.max_amount)) {
+  if (plan.max_amount && amountNum > Number(plan.max_amount)) {
     return NextResponse.json(
       { error: `Maximum investment is ${plan.max_amount} for ${plan.label}` },
       { status: 400 }
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 5. Pre-calculate all contract financials — locked at creation, immutable after ACTIVE
-  const profitRate = parseFloat(plan.profit_rate);
+  const profitRate = Number(plan.profit_rate);
   const durationDays = plan.duration_days;
   // Daily slice: principal × rate ÷ duration (using full precision, rounded to 8dp)
   const dailyProfitAmount = (amountNum * profitRate) / durationDays;
@@ -144,10 +144,10 @@ export async function POST(req: NextRequest) {
       user_id: user.id,
       plan_id: plan.id,
       plan_tier: plan.tier,                                    // plan_tier NOT NULL
-      principal_amount: amountNum.toFixed(8),
-      expected_profit: expectedProfit.toFixed(8),              // expected_profit NOT NULL
-      daily_profit_amount: dailyProfitAmount.toFixed(8),       // daily_profit_amount NOT NULL
-      profit_rate_snapshot: profitRate.toFixed(6),             // profit_rate_snapshot NOT NULL
+      principal_amount: amountNum,
+      expected_profit: expectedProfit,
+      daily_profit_amount: Number(dailyProfitAmount),
+      profit_rate_snapshot: profitRate,
       duration_days_snapshot: durationDays,                    // duration_days_snapshot NOT NULL
       state: "PENDING",                                        // contract_state enum
       auto_reinvest: auto_reinvest,
@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
     .from("wc_deposits")
     .insert({
       user_id: user.id,
-      amount: amountNum.toFixed(8),
+      amount: amountNum,
       currency,
       payment_method: walletConfig.paymentMethod,              // payment_method NOT NULL
       status: "PENDING",
@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
         plan_tier: plan.tier,
         principal_amount: amountNum.toFixed(8),
         expected_profit: expectedProfit.toFixed(8),
-        daily_profit_amount: dailyProfitAmount.toFixed(8),
+        daily_profit_amount: Number(dailyProfitAmount),
         duration_days: durationDays,
         profit_rate: profitRate,
         auto_reinvest,

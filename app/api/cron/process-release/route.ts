@@ -4,15 +4,15 @@
  * Daily cron — processes contracts in RELEASE_QUEUE whose release delay has elapsed.
  *
  * A contract enters RELEASE_QUEUE when:
- * - It matured AND auto_reinvest = false
- * - Admin force-cancelled it (capital goes into release delay)
+ *   - It matured AND auto_reinvest = false
+ *   - Admin force-cancelled it (capital goes into release delay)
  *
  * When release_eligible_date <= today:
- * 1. Post CAPITAL_RELEASE ledger tx:
- * DR  USER_CAPITAL_PENDING_RELEASE  (exit release queue)
- * CR  USER_WALLET                   (capital now available)
- * 2. contract.state → RELEASED
- * 3. Increment available_balance cache
+ *   1. Post CAPITAL_RELEASE ledger tx:
+ *        DR  USER_CAPITAL_PENDING_RELEASE  (exit release queue)
+ *        CR  USER_WALLET                   (capital now available)
+ *   2. contract.state → RELEASED
+ *   3. Increment available_balance cache
  *
  * Note: The schema does not have a USER_CAPITAL_PENDING_RELEASE balance
  * column in wc_wallet_balances — only pending_release_capital.
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
 
   for (const contract of contracts) {
     try {
-      const principalStr = parseFloat(contract.principal_amount).toFixed(8);
+      const principalStr = Number(contract.principal_amount).toFixed(8);
 
       // Post CAPITAL_RELEASE: DR USER_CAPITAL_PENDING_RELEASE / CR USER_WALLET
       await postLedgerTransaction({
@@ -136,7 +136,7 @@ export async function GET(req: NextRequest) {
       // available_balance += principal
       await adminClient.rpc("process_capital_release_balances", {
         p_user_id: contract.user_id,
-        p_amount: principalStr,
+        p_amount: Number(principalStr),
       }).then(({ error }) => {
         if (error) console.error(`Wallet cache update failed for ${contract.user_id}:`, error.message);
       });

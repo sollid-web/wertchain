@@ -5,37 +5,37 @@
  *
  * On APPROVE — three atomic operations per schema spec §9 (MIGRATION_DEBIT → MIGRATION_CREDIT):
  *
- * TX 1: MIGRATION_DEBIT (debit old contract capital to transit)
- * DR  USER_CAPITAL_LOCKED         (remove from old contract)
- * CR  PLATFORM_MIGRATION_RESERVE  (capital in transit)
+ *   TX 1: MIGRATION_DEBIT (debit old contract capital to transit)
+ *     DR  USER_CAPITAL_LOCKED         (remove from old contract)
+ *     CR  PLATFORM_MIGRATION_RESERVE  (capital in transit)
  *
- * TX 2: MIGRATION_CREDIT (credit new contract capital from transit)
- * DR  PLATFORM_MIGRATION_RESERVE  (exit transit)
- * CR  USER_CAPITAL_LOCKED         (locked in new contract)
+ *   TX 2: MIGRATION_CREDIT (credit new contract capital from transit)
+ *     DR  PLATFORM_MIGRATION_RESERVE  (exit transit)
+ *     CR  USER_CAPITAL_LOCKED         (locked in new contract)
  *
- * If topup_amount > 0, also post TOP_UP tx:
- * DR  USER_WALLET                 (debit top-up from available)
- * CR  USER_CAPITAL_LOCKED         (add to new contract)
+ *   If topup_amount > 0, also post TOP_UP tx:
+ *     DR  USER_WALLET                 (debit top-up from available)
+ *     CR  USER_CAPITAL_LOCKED         (add to new contract)
  *
- * Then:
- * - Create new wc_contracts record (state=ACTIVE)
- * - Set migration.new_contract_id, status → APPROVED
- * - Set old contract.state → MIGRATED (terminal)
- * - Decrement locked_capital (old principal), increment locked_capital (new principal)
- * - If topup: decrement available_balance
+ *   Then:
+ *     - Create new wc_contracts record (state=ACTIVE)
+ *     - Set migration.new_contract_id, status → APPROVED
+ *     - Set old contract.state → MIGRATED (terminal)
+ *     - Decrement locked_capital (old principal), increment locked_capital (new principal)
+ *     - If topup: decrement available_balance
  *
  * On REJECT:
- * - migration.status → REJECTED
- * - source contract.state → MATURED (returns to previous state)
+ *     - migration.status → REJECTED
+ *     - source contract.state → MATURED (returns to previous state)
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@/supabase/server";
+import { createClient, createAdminClient } from "@/supabase/server";
 import { adminClient, postLedgerTransaction } from "@/lib/ledger";
 
 export async function POST(req: NextRequest) {
   // 1. Auth
-  const supabase = await createServerClient();
+  const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -126,11 +126,12 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date();
-  const capitalStr = parseFloat(migration.capital_amount).toFixed(8);
-  const topupNum = parseFloat(migration.topup_amount);
-  const topupStr = topupNum.toFixed(8);
-  const totalPrincipal = parseFloat(migration.total_new_principal);
-  const totalPrincipalStr = totalPrincipal.toFixed(8);
+  const capitalAmount = migration.capital_amount as number;
+  const capitalStr = Number(capitalAmount).toFixed(8);
+  const topupNum = migration.topup_amount as number;
+  const topupStr = Number(topupNum).toFixed(8);
+  const totalPrincipal = migration.total_new_principal as number;
+  const totalPrincipalStr = Number(totalPrincipal).toFixed(8);
   const userId = migration.user_id;
 
   // ── REJECT ────────────────────────────────────────────────────────────────
@@ -169,7 +170,7 @@ export async function POST(req: NextRequest) {
   try {
     // Calculate new contract financials using TARGET plan rates
     const newDuration = targetPlan.duration_days;
-    const newProfitRate = parseFloat(targetPlan.profit_rate);
+    const newProfitRate = Number(targetPlan.profit_rate);
     const newDailyProfit = (totalPrincipal * newProfitRate) / newDuration;
     const newExpectedProfit = totalPrincipal * newProfitRate;
 
@@ -188,10 +189,10 @@ export async function POST(req: NextRequest) {
         user_id: userId,
         plan_id: targetPlan.id,
         plan_tier: targetPlan.tier,
-        principal_amount: totalPrincipalStr,
-        expected_profit: newExpectedProfit.toFixed(8),
-        daily_profit_amount: newDailyProfit.toFixed(8),
-        profit_rate_snapshot: newProfitRate.toFixed(6),
+        principal_amount: Number(totalPrincipal),
+        expected_profit: newExpectedProfit,
+        daily_profit_amount: Number(newDailyProfit),
+        profit_rate_snapshot: newProfitRate,
         duration_days_snapshot: newDuration,
         state: "ACTIVE",
         auto_reinvest: true,
@@ -216,20 +217,20 @@ export async function POST(req: NextRequest) {
       contractId: migration.source_contract_id,
       migrationId: migration_id,
       description: `Migration debit — capital exiting contract ${migration.source_contract_id} to transit`,
-      amount: capitalStr,
+      amount: Number(capitalStr).toFixed(8),
       idempotencyKey: `migration_debit_${migration_id}`,
       initiatedBy: user.id,
       lines: [
         {
           accountType: "USER_CAPITAL_LOCKED",
           direction: "DEBIT",
-          amount: capitalStr,
+          amount: Number(capitalStr).toFixed(8),
           userId,
         },
         {
           accountType: "PLATFORM_MIGRATION_RESERVE",
           direction: "CREDIT",
-          amount: capitalStr,
+          amount: Number(capitalStr).toFixed(8),
           userId: undefined,
         },
       ],
@@ -242,20 +243,20 @@ export async function POST(req: NextRequest) {
       contractId: newContract.id,
       migrationId: migration_id,
       description: `Migration credit — capital entering new contract ${newContract.id} from transit`,
-      amount: capitalStr,
+      amount: Number(capitalStr).toFixed(8),
       idempotencyKey: `migration_credit_${migration_id}`,
       initiatedBy: user.id,
       lines: [
         {
           accountType: "PLATFORM_MIGRATION_RESERVE",
           direction: "DEBIT",
-          amount: capitalStr,
+          amount: Number(capitalStr).toFixed(8),
           userId: undefined,
         },
         {
           accountType: "USER_CAPITAL_LOCKED",
           direction: "CREDIT",
-          amount: capitalStr,
+          amount: Number(capitalStr).toFixed(8),
           userId,
         },
       ],
@@ -269,20 +270,20 @@ export async function POST(req: NextRequest) {
         contractId: newContract.id,
         migrationId: migration_id,
         description: `Migration top-up — ${topupStr} added to new contract ${newContract.id}`,
-        amount: topupStr,
+        amount: Number(topupStr).toFixed(8),
         idempotencyKey: `migration_topup_${migration_id}`,
         initiatedBy: user.id,
         lines: [
           {
             accountType: "USER_WALLET",
             direction: "DEBIT",
-            amount: topupStr,
+            amount: Number(topupStr).toFixed(8),
             userId,
           },
           {
             accountType: "USER_CAPITAL_LOCKED",
             direction: "CREDIT",
-            amount: topupStr,
+            amount: Number(topupStr).toFixed(8),
             userId,
           },
         ],
@@ -291,7 +292,7 @@ export async function POST(req: NextRequest) {
       // Decrement available_balance for top-up
       await adminClient.rpc("decrement_available_balance", {
         p_user_id: userId,
-        p_amount: topupStr,
+        p_amount: Number(topupNum),
       }).then(({ error }) => {
         if (error) console.error("available_balance decrement failed (non-fatal):", error.message);
       });
@@ -324,7 +325,7 @@ export async function POST(req: NextRequest) {
     if (topupNum > 0) {
       await adminClient.rpc("increment_locked_capital", {
         p_user_id: userId,
-        p_amount: topupStr,
+        p_amount: Number(topupNum),
       }).then(({ error }) => {
         if (error) console.error("locked_capital cache update failed (non-fatal):", error.message);
       });
@@ -358,7 +359,7 @@ export async function POST(req: NextRequest) {
           id: newContract.id,
           state: "ACTIVE",
           plan: targetPlan.label,
-          principal_amount: totalPrincipalStr,
+          principal_amount: Number(totalPrincipal).toFixed(8),
           maturity_date: maturityDateStr,
         },
       },
